@@ -219,7 +219,7 @@
 <script>
   // ─── CONFIG ──────────────────────────────────────────────────────────────
   // Troque pela URL do seu backend no Render/Railway após o deploy
-  const API_URL = "https://palavra-biblica.onrender.com";
+  const API_URL = "https://SEU-BACKEND.onrender.com";
 
   // ─── Stars ───────────────────────────────────────────────────────────────
   const starsEl = document.getElementById("stars");
@@ -313,8 +313,9 @@
       bg.addColorStop(0, "#1e1408"); bg.addColorStop(1, "#0e0a05");
       ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
+      // Glow center
       const glow = ctx.createRadialGradient(540, 480, 0, 540, 480, 680);
-      glow.addColorStop(0, "rgba(201,168,76,0.07)"); glow.addColorStop(1, "transparent");
+      glow.addColorStop(0, "rgba(201,168,76,0.08)"); glow.addColorStop(1, "transparent");
       ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 
       const lineGrad = (x1, x2, y) => {
@@ -322,83 +323,100 @@
         g.addColorStop(0, "transparent"); g.addColorStop(0.5, "#c9a84c"); g.addColorStop(1, "transparent");
         return g;
       };
-
-      const drawLine = (x1, x2, y, opacity = 1) => {
-        ctx.save(); ctx.globalAlpha = opacity;
+      const drawLine = (x1, x2, y, op = 1) => {
+        ctx.save(); ctx.globalAlpha = op;
         ctx.strokeStyle = lineGrad(x1, x2, y);
         ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
         ctx.restore();
       };
 
-      function wrapText(text, maxW, fontSize, font) {
-        ctx.font = `${fontSize}px ${font}`;
+      // Usa apenas fontes seguras (sem Google Fonts no canvas)
+      function wrapText(text, maxW, font) {
+        ctx.font = font;
         return text.split(" ").reduce((lines, word) => {
           const last = lines[lines.length - 1];
           const test = last ? `${last} ${word}` : word;
-          if (ctx.measureText(test).width > maxW && last) { lines.push(word); }
-          else { lines[lines.length - 1] = test; }
+          if (ctx.measureText(test).width > maxW && last) lines.push(word);
+          else lines[lines.length - 1] = test;
           return lines;
         }, [""]);
       }
 
-      drawLine(140, 940, 88);
-
-      ctx.fillStyle = "#f0d080";
-      ctx.font = "bold 40px Georgia, serif";
       ctx.textAlign = "center";
-      ctx.fillText("PALAVRA DE DEUS", 540, 152);
 
-      drawLine(340, 740, 178, 0.6);
-
-      // Verse
-      const vLines = wrapText(`"${versiculo}"`, 820, 36, "italic Georgia, serif");
-      ctx.font = "italic 36px 'EB Garamond', Georgia, serif";
-      ctx.fillStyle = "#f5ead6";
-      let y = 255;
-      for (const l of vLines) { ctx.fillText(l, 540, y); y += 54; }
-
-      // Reference
-      ctx.fillStyle = "#c9a84c";
-      ctx.font = "bold 28px Georgia, serif";
-      ctx.fillText(`— ${referencia}`, 540, y + 28);
-      y += 90;
-
-      drawLine(140, 940, y);
-      y += 52;
-
+      // Topo
+      drawLine(140, 940, 88);
       ctx.fillStyle = "#f0d080";
-      ctx.font = "bold 26px Georgia, serif";
-      ctx.letterSpacing = "4px";
+      ctx.font = "bold 42px Georgia, serif";
+      ctx.fillText("PALAVRA DE DEUS", 540, 155);
+      drawLine(300, 780, 182, 0.5);
+
+      // Versículo
+      const vFont = "italic 36px Georgia, serif";
+      const vLines = wrapText(`"${versiculo}"`, 820, vFont);
+      ctx.font = vFont;
+      ctx.fillStyle = "#f5ead6";
+      let y = 260;
+      for (const l of vLines) { ctx.fillText(l, 540, y); y += 56; }
+
+      // Referência
+      ctx.fillStyle = "#c9a84c";
+      ctx.font = "bold 30px Georgia, serif";
+      ctx.fillText(`— ${referencia}`, 540, y + 32);
+      y += 95;
+
+      // Divisor estudo
+      drawLine(140, 940, y);
+      y += 55;
+      ctx.fillStyle = "#f0d080";
+      ctx.font = "bold 28px Georgia, serif";
       ctx.fillText("ESTUDO BÍBLICO", 540, y);
-      ctx.letterSpacing = "0px";
-      y += 46;
+      y += 48;
 
-      const sLines = wrapText(estudo, 860, 23, "Georgia, serif");
+      // Texto do estudo
+      const sFont = "22px Georgia, serif";
+      const sLines = wrapText(estudo, 860, sFont);
+      ctx.font = sFont;
       ctx.fillStyle = "#c8b890";
-      ctx.font = "23px 'EB Garamond', Georgia, serif";
-      for (const l of sLines) { y += 40; ctx.fillText(l, 540, y); }
+      for (const l of sLines) { ctx.fillText(l, 540, y); y += 40; }
 
+      // Rodapé
       ctx.fillStyle = "#3a2a10";
-      ctx.font = "22px Georgia, serif";
+      ctx.font = "24px Georgia, serif";
       ctx.fillText("✦  ✦  ✦", 540, 1290);
-      drawLine(140, 940, 1312, 0.8);
+      drawLine(140, 940, 1312, 0.7);
 
-      canvas.toBlob(async (blob) => {
+      // Exportar
+      const dataUrl = canvas.toDataURL("image/png");
+
+      // Tenta compartilhar nativamente (mobile), senão faz download
+      try {
+        const blob = await new Promise((res, rej) => {
+          canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob falhou")), "image/png");
+        });
         const file = new File([blob], "palavra-biblica.png", { type: "image/png" });
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], title: referencia, text: `${versiculo} — ${referencia}` });
-        } else {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement("a"); a.href = url; a.download = "palavra-biblica.png"; a.click();
-          URL.revokeObjectURL(url);
+          btn.disabled = false; btn.textContent = "↗ Compartilhar Imagem";
+          return;
         }
-        btn.disabled = false; btn.textContent = "↗ Compartilhar Imagem";
-      }, "image/png");
+      } catch (_) { /* fallback para download */ }
+
+      // Download direto
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = "palavra-biblica.png";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
 
     } catch (err) {
-      console.error(err);
-      btn.disabled = false; btn.textContent = "↗ Compartilhar Imagem";
+      console.error("Erro ao gerar imagem:", err);
+      alert("Erro ao gerar imagem: " + err.message);
     }
+
+    btn.disabled = false;
+    btn.textContent = "↗ Compartilhar Imagem";
   }
 </script>
 </body>
