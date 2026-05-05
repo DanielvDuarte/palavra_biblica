@@ -217,24 +217,19 @@
 </div>
 
 <script>
-  // ─── CONFIG ──────────────────────────────────────────────────────────────
-  // Troque pela URL do seu backend no Render/Railway após o deploy
-  const API_URL = "https://SEU-BACKEND.onrender.com";
+  const API_URL = "https://palavra-biblica.onrender.com";
 
-  // ─── Stars ───────────────────────────────────────────────────────────────
+  // Stars
   const starsEl = document.getElementById("stars");
   for (let i = 0; i < 100; i++) {
     const s = document.createElement("span");
     const sz = Math.random() * 2.2 + 0.4;
-    s.style.cssText = `width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;
-      --d:${(Math.random()*4+2).toFixed(1)}s;--dl:${(Math.random()*6).toFixed(1)}s;--op:${(Math.random()*.5+.2).toFixed(2)}`;
+    s.style.cssText = `width:${sz}px;height:${sz}px;top:${Math.random()*100}%;left:${Math.random()*100}%;--d:${(Math.random()*4+2).toFixed(1)}s;--dl:${(Math.random()*6).toFixed(1)}s;--op:${(Math.random()*.5+.2).toFixed(2)}`;
     starsEl.appendChild(s);
   }
 
-  // ─── State ───────────────────────────────────────────────────────────────
   let currentData = null;
 
-  // ─── Load ─────────────────────────────────────────────────────────────────
   async function loadVersiculo() {
     const btnNew      = document.getElementById("btnNew");
     const placeholder = document.getElementById("placeholder");
@@ -245,6 +240,7 @@
     const verseRef    = document.getElementById("verseRef");
     const studyCard   = document.getElementById("studyCard");
     const studyText   = document.getElementById("studyText");
+    const btnShare    = document.getElementById("btnShare");
 
     // reset
     btnNew.disabled = true;
@@ -257,9 +253,12 @@
     verseText.textContent = "";
     verseRef.textContent = "";
     studyText.textContent = "";
-    loaderMsg.textContent = "Buscando versículo e preparando estudo...";
-    loaderVerse.classList.add("active");
+    btnShare.style.display = "";
     currentData = null;
+
+    // ETAPA 1: versículo (gratuito)
+    loaderMsg.textContent = "Buscando versículo...";
+    loaderVerse.classList.add("active");
 
     try {
       const res = await fetch(`${API_URL}/api/versiculo`);
@@ -268,32 +267,65 @@
         throw new Error(err.error || `HTTP ${res.status}`);
       }
       const data = await res.json();
-      currentData = data;
+      currentData = { versiculo: data.versiculo, referencia: data.referencia, estudo: null };
 
       loaderVerse.classList.remove("active");
-
       verseText.textContent = `"${data.versiculo}"`;
       verseRef.textContent  = `— ${data.referencia}`;
-      setTimeout(() => {
-        verseText.classList.add("show");
-        verseRef.classList.add("show");
-      }, 50);
+      setTimeout(() => { verseText.classList.add("show"); verseRef.classList.add("show"); }, 50);
+      btnNew.disabled = false;
 
+      // ETAPA 2: estudo completo (Claude)
       studyCard.style.display = "block";
-      studyText.textContent = data.estudo;
-      setTimeout(() => studyText.classList.add("show"), 200);
+      studyText.style.color = "var(--text-study)";
+      studyText.style.fontStyle = "normal";
+      studyText.textContent = "";
+      loaderMsg.textContent = "Gerando estudo bíblico...";
+      loaderVerse.classList.add("active");
+
+      try {
+        const res2 = await fetch(`${API_URL}/api/estudo`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ versiculo: data.versiculo, referencia: data.referencia }),
+        });
+        const data2 = await res2.json();
+        loaderVerse.classList.remove("active");
+
+        if (res2.status === 402 || data2.error === "sem_creditos") {
+          studyText.style.color = "#7a5525";
+          studyText.style.fontStyle = "italic";
+          studyText.textContent = "⚠ Estudo bíblico indisponível — créditos de IA esgotados. O versículo acima está disponível normalmente.";
+          studyText.classList.add("show");
+          btnShare.style.display = "none";
+        } else if (!res2.ok) {
+          studyText.style.color = "#7a5525";
+          studyText.style.fontStyle = "italic";
+          studyText.textContent = `⚠ Erro ao gerar estudo: ${data2.error || "tente novamente"}`;
+          studyText.classList.add("show");
+          btnShare.style.display = "none";
+        } else {
+          currentData.estudo = data2.estudo;
+          studyText.textContent = data2.estudo;
+          setTimeout(() => studyText.classList.add("show"), 100);
+        }
+      } catch (err2) {
+        loaderVerse.classList.remove("active");
+        studyText.style.color = "#7a5525";
+        studyText.style.fontStyle = "italic";
+        studyText.textContent = "⚠ Não foi possível conectar ao serviço de estudo bíblico.";
+        studyText.classList.add("show");
+        btnShare.style.display = "none";
+      }
 
     } catch (err) {
       loaderVerse.classList.remove("active");
       errorMsg.textContent = `⚠ ${err.message}`;
       errorMsg.style.display = "block";
-      placeholder.style.display = "none";
+      btnNew.disabled = false;
     }
-
-    btnNew.disabled = false;
   }
 
-  // ─── Share ────────────────────────────────────────────────────────────────
   async function shareImage() {
     if (!currentData) return;
     const btn = document.getElementById("btnShare");
@@ -302,36 +334,31 @@
 
     try {
       const { versiculo, referencia, estudo } = currentData;
-
       const W = 1080, H = 1350;
       const canvas = document.createElement("canvas");
       canvas.width = W; canvas.height = H;
       const ctx = canvas.getContext("2d");
 
-      // Background
       const bg = ctx.createLinearGradient(0, 0, W, H);
       bg.addColorStop(0, "#1e1408"); bg.addColorStop(1, "#0e0a05");
       ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
 
-      // Glow center
       const glow = ctx.createRadialGradient(540, 480, 0, 540, 480, 680);
       glow.addColorStop(0, "rgba(201,168,76,0.08)"); glow.addColorStop(1, "transparent");
       ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
 
-      const lineGrad = (x1, x2, y) => {
+      const mkLine = (x1, x2, y) => {
         const g = ctx.createLinearGradient(x1, y, x2, y);
         g.addColorStop(0, "transparent"); g.addColorStop(0.5, "#c9a84c"); g.addColorStop(1, "transparent");
         return g;
       };
       const drawLine = (x1, x2, y, op = 1) => {
         ctx.save(); ctx.globalAlpha = op;
-        ctx.strokeStyle = lineGrad(x1, x2, y);
+        ctx.strokeStyle = mkLine(x1, x2, y);
         ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2, y); ctx.stroke();
         ctx.restore();
       };
-
-      // Usa apenas fontes seguras (sem Google Fonts no canvas)
-      function wrapText(text, maxW, font) {
+      const wrap = (text, maxW, font) => {
         ctx.font = font;
         return text.split(" ").reduce((lines, word) => {
           const last = lines[lines.length - 1];
@@ -340,83 +367,62 @@
           else lines[lines.length - 1] = test;
           return lines;
         }, [""]);
-      }
+      };
 
       ctx.textAlign = "center";
-
-      // Topo
       drawLine(140, 940, 88);
-      ctx.fillStyle = "#f0d080";
-      ctx.font = "bold 42px Georgia, serif";
+      ctx.fillStyle = "#f0d080"; ctx.font = "bold 42px Georgia, serif";
       ctx.fillText("PALAVRA DE DEUS", 540, 155);
       drawLine(300, 780, 182, 0.5);
 
-      // Versículo
       const vFont = "italic 36px Georgia, serif";
-      const vLines = wrapText(`"${versiculo}"`, 820, vFont);
-      ctx.font = vFont;
-      ctx.fillStyle = "#f5ead6";
-      let y = 260;
+      const vLines = wrap(`"${versiculo}"`, 820, vFont);
+      ctx.font = vFont; ctx.fillStyle = "#f5ead6";
+      let y = 262;
       for (const l of vLines) { ctx.fillText(l, 540, y); y += 56; }
 
-      // Referência
-      ctx.fillStyle = "#c9a84c";
-      ctx.font = "bold 30px Georgia, serif";
+      ctx.fillStyle = "#c9a84c"; ctx.font = "bold 30px Georgia, serif";
       ctx.fillText(`— ${referencia}`, 540, y + 32);
-      y += 95;
+      y += 96;
 
-      // Divisor estudo
-      drawLine(140, 940, y);
-      y += 55;
-      ctx.fillStyle = "#f0d080";
-      ctx.font = "bold 28px Georgia, serif";
-      ctx.fillText("ESTUDO BÍBLICO", 540, y);
-      y += 48;
+      if (estudo) {
+        drawLine(140, 940, y);
+        y += 56;
+        ctx.fillStyle = "#f0d080"; ctx.font = "bold 28px Georgia, serif";
+        ctx.fillText("ESTUDO BÍBLICO", 540, y);
+        y += 50;
+        const sLines = wrap(estudo, 860, "22px Georgia, serif");
+        ctx.font = "22px Georgia, serif"; ctx.fillStyle = "#c8b890";
+        for (const l of sLines) { ctx.fillText(l, 540, y); y += 40; }
+      }
 
-      // Texto do estudo
-      const sFont = "22px Georgia, serif";
-      const sLines = wrapText(estudo, 860, sFont);
-      ctx.font = sFont;
-      ctx.fillStyle = "#c8b890";
-      for (const l of sLines) { ctx.fillText(l, 540, y); y += 40; }
-
-      // Rodapé
-      ctx.fillStyle = "#3a2a10";
-      ctx.font = "24px Georgia, serif";
+      ctx.fillStyle = "#3a2a10"; ctx.font = "24px Georgia, serif";
       ctx.fillText("✦  ✦  ✦", 540, 1290);
       drawLine(140, 940, 1312, 0.7);
 
-      // Exportar
       const dataUrl = canvas.toDataURL("image/png");
-
-      // Tenta compartilhar nativamente (mobile), senão faz download
       try {
-        const blob = await new Promise((res, rej) => {
-          canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob falhou")), "image/png");
-        });
+        const blob = await new Promise((res, rej) =>
+          canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob falhou")), "image/png")
+        );
         const file = new File([blob], "palavra-biblica.png", { type: "image/png" });
         if (navigator.canShare?.({ files: [file] })) {
           await navigator.share({ files: [file], title: referencia, text: `${versiculo} — ${referencia}` });
           btn.disabled = false; btn.textContent = "↗ Compartilhar Imagem";
           return;
         }
-      } catch (_) { /* fallback para download */ }
+      } catch (_) {}
 
-      // Download direto
       const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = "palavra-biblica.png";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-
+      a.href = dataUrl; a.download = "palavra-biblica.png";
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      btn.textContent = "✓ Imagem baixada!";
+      setTimeout(() => { btn.textContent = "↗ Compartilhar Imagem"; }, 2500);
     } catch (err) {
-      console.error("Erro ao gerar imagem:", err);
+      console.error(err);
       alert("Erro ao gerar imagem: " + err.message);
     }
-
     btn.disabled = false;
-    btn.textContent = "↗ Compartilhar Imagem";
   }
 </script>
 </body>

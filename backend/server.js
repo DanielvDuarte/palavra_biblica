@@ -7,7 +7,7 @@ const Anthropic = require("@anthropic-ai/sdk");
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
+// CORS
 const allowedOrigins = [
   "http://localhost:5500",
   "http://127.0.0.1:5500",
@@ -23,11 +23,8 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// ─── Anthropic client ─────────────────────────────────────────────────────────
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ─── Lista de referências bíblicas para sorteio ───────────────────────────────
-// bible-api.com aceita referências no formato "book+chapter:verse" em inglês
 const REFERENCIAS = [
   "john 3:16","john 14:6","john 15:13","john 1:1","john 11:35",
   "romans 8:28","romans 8:38-39","romans 5:8","romans 3:23","romans 6:23",
@@ -54,7 +51,6 @@ const REFERENCIAS = [
   "lamentations 3:22-23","numbers 6:24-26",
 ];
 
-// ─── Helper: fetch simples via https nativo ───────────────────────────────────
 function fetchJson(url) {
   return new Promise((resolve, reject) => {
     https.get(url, (res) => {
@@ -62,48 +58,31 @@ function fetchJson(url) {
       res.on("data", (chunk) => (data += chunk));
       res.on("end", () => {
         try { resolve(JSON.parse(data)); }
-        catch (e) { reject(new Error("JSON inválido da bible-api")); }
+        catch (e) { reject(new Error("JSON invalido da bible-api")); }
       });
     }).on("error", reject);
   });
 }
 
-// ─── Helper: Claude só para o estudo ─────────────────────────────────────────
-async function gerarEstudo(versiculo, referencia) {
-  const msg = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
-    max_tokens: 600,
-    system: `Você é um estudioso bíblico. Retorne APENAS JSON válido, sem markdown.
-Campo "estudo": parágrafo curto (4 a 6 linhas) com contexto histórico, significado teológico e aplicação prática.
-Escrita clara, edificante e acessível.`,
-    messages: [{ role: "user", content: `Faça um pequeno estudo bíblico sobre: "${versiculo}" — ${referencia}` }],
-  });
-  const raw = msg.content.find((b) => b.type === "text")?.text ?? "";
-  const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
-  if (!parsed.estudo) throw new Error("Campo 'estudo' ausente");
-  return parsed.estudo;
-}
-
-// ─── Tradução de nomes de livros inglês → português ───────────────────────────
 const LIVROS_PT = {
-  "Genesis":"Gênesis","Exodus":"Êxodo","Leviticus":"Levítico","Numbers":"Números",
-  "Deuteronomy":"Deuteronômio","Joshua":"Josué","Judges":"Juízes","Ruth":"Rute",
+  "Genesis":"Geneses","Exodus":"Exodo","Leviticus":"Levitico","Numbers":"Numeros",
+  "Deuteronomy":"Deuteronomio","Joshua":"Josue","Judges":"Juizes","Ruth":"Rute",
   "1 Samuel":"1 Samuel","2 Samuel":"2 Samuel","1 Kings":"1 Reis","2 Kings":"2 Reis",
-  "1 Chronicles":"1 Crônicas","2 Chronicles":"2 Crônicas","Ezra":"Esdras","Nehemiah":"Neemias",
-  "Esther":"Ester","Job":"Jó","Psalms":"Salmos","Proverbs":"Provérbios",
-  "Ecclesiastes":"Eclesiastes","Song of Solomon":"Cânticos","Isaiah":"Isaías",
-  "Jeremiah":"Jeremias","Lamentations":"Lamentações","Ezekiel":"Ezequiel","Daniel":"Daniel",
-  "Hosea":"Oséias","Joel":"Joel","Amos":"Amós","Obadiah":"Obadias","Jonah":"Jonas",
-  "Micah":"Miquéias","Nahum":"Naum","Habakkuk":"Habacuque","Zephaniah":"Sofonias",
+  "1 Chronicles":"1 Cronicas","2 Chronicles":"2 Cronicas","Ezra":"Esdras","Nehemiah":"Neemias",
+  "Esther":"Ester","Job":"Jo","Psalms":"Salmos","Proverbs":"Proverbios",
+  "Ecclesiastes":"Eclesiastes","Song of Solomon":"Canticos","Isaiah":"Isaias",
+  "Jeremiah":"Jeremias","Lamentations":"Lamentacoes","Ezekiel":"Ezequiel","Daniel":"Daniel",
+  "Hosea":"Oseias","Joel":"Joel","Amos":"Amos","Obadiah":"Obadias","Jonah":"Jonas",
+  "Micah":"Miqueias","Nahum":"Naum","Habakkuk":"Habacuque","Zephaniah":"Sofonias",
   "Haggai":"Ageu","Zechariah":"Zacarias","Malachi":"Malaquias",
-  "Matthew":"Mateus","Mark":"Marcos","Luke":"Lucas","John":"João","Acts":"Atos",
-  "Romans":"Romanos","1 Corinthians":"1 Coríntios","2 Corinthians":"2 Coríntios",
-  "Galatians":"Gálatas","Ephesians":"Efésios","Philippians":"Filipenses",
+  "Matthew":"Mateus","Mark":"Marcos","Luke":"Lucas","John":"Joao","Acts":"Atos",
+  "Romans":"Romanos","1 Corinthians":"1 Corintios","2 Corinthians":"2 Corintios",
+  "Galatians":"Galatas","Ephesians":"Efesios","Philippians":"Filipenses",
   "Colossians":"Colossenses","1 Thessalonians":"1 Tessalonicenses",
-  "2 Thessalonians":"2 Tessalonicenses","1 Timothy":"1 Timóteo","2 Timothy":"2 Timóteo",
+  "2 Thessalonians":"2 Tessalonicenses","1 Timothy":"1 Timoteo","2 Timothy":"2 Timoteo",
   "Titus":"Tito","Philemon":"Filemom","Hebrews":"Hebreus","James":"Tiago",
-  "1 Peter":"1 Pedro","2 Peter":"2 Pedro","1 John":"1 João","2 John":"2 João",
-  "3 John":"3 João","Jude":"Judas","Revelation":"Apocalipse",
+  "1 Peter":"1 Pedro","2 Peter":"2 Pedro","1 John":"1 Joao","2 John":"2 Joao",
+  "3 John":"3 Joao","Jude":"Judas","Revelation":"Apocalipse",
 };
 
 function traduzirReferencia(ref) {
@@ -113,36 +92,62 @@ function traduzirReferencia(ref) {
   return ref;
 }
 
-// ─── ROUTE: versículo + estudo (híbrido) ──────────────────────────────────────
+// ROTA 1: versiculo gratuito
 app.get("/api/versiculo", async (req, res) => {
   try {
-    // 1. Sorteia referência e busca na bible-api.com (gratuito, sem chave)
     const refEn = REFERENCIAS[Math.floor(Math.random() * REFERENCIAS.length)];
     const url = `https://bible-api.com/${encodeURIComponent(refEn)}?translation=almeida`;
     const bibleData = await fetchJson(url);
-
-    if (!bibleData.text) throw new Error("Versículo não encontrado na bible-api");
-
+    if (!bibleData.text) throw new Error("Versiculo nao encontrado");
     const versiculo = bibleData.text.replace(/\n/g, " ").trim();
     const referencia = traduzirReferencia(bibleData.reference);
-
-    // 2. Claude gera apenas o estudo (~metade do custo anterior)
-    const estudo = await gerarEstudo(versiculo, referencia);
-
-    res.json({ versiculo, referencia, estudo });
-
+    res.json({ versiculo, referencia });
   } catch (err) {
     console.error("Erro /api/versiculo:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── Health check ─────────────────────────────────────────────────────────────
+// ROTA 2: estudo completo via Claude
+app.post("/api/estudo", async (req, res) => {
+  const { versiculo, referencia } = req.body || {};
+  if (!versiculo || !referencia) {
+    return res.status(400).json({ error: "Campos versiculo e referencia sao obrigatorios" });
+  }
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 1000,
+      system: `Voce e um estudioso biblico experiente. Retorne APENAS JSON valido, sem markdown.
+Campo "estudo": um estudo biblico completo e enriquecedor (6 a 10 linhas) contendo:
+1. Contexto historico e cultural do livro/autor
+2. Significado teologico profundo do versiculo
+3. Conexoes com outros textos biblicos
+4. Aplicacao pratica para a vida atual
+Escrita clara, edificante e acessivel ao leitor comum.`,
+      messages: [{ role: "user", content: `Faca um estudo biblico completo sobre: "${versiculo}" - ${referencia}` }],
+    });
+    const raw = msg.content.find((b) => b.type === "text")?.text ?? "";
+    const parsed = JSON.parse(raw.replace(/```json|```/g, "").trim());
+    if (!parsed.estudo) throw new Error("Campo estudo ausente");
+    res.json({ estudo: parsed.estudo });
+  } catch (err) {
+    console.error("Erro /api/estudo:", err.message);
+    const semCredito = err.message?.includes("credit balance") || err.message?.includes("invalid_request_error");
+    if (semCredito) {
+      return res.status(402).json({
+        error: "sem_creditos",
+        message: "Creditos da IA esgotados. O estudo biblico nao pode ser gerado no momento."
+      });
+    }
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/health", (_, res) => res.json({ status: "ok" }));
 
-// ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
-  console.log(`✅  API híbrida rodando em http://localhost:${PORT}`);
-  console.log(`   Versículos: bible-api.com (gratuito)`);
-  console.log(`   Estudo:     Claude claude-sonnet-4-6 (~$0.01/req)`);
+  console.log(`API rodando em http://localhost:${PORT}`);
+  console.log(`  Versiculos: bible-api.com (gratuito)`);
+  console.log(`  Estudo:     Claude claude-sonnet-4-6 (~$0.01/req)`);
 });
